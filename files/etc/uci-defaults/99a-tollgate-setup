@@ -156,37 +156,92 @@ uci commit network
 uci commit dhcp
 log_message "dnsmasq configuration completed"
 
-# 4. Configure WiFi networks
-log_message "Configuring WiFi networks"
+# 4. Configure WiFi networks - Trail's Coffee Three-Tier Setup
+log_message "Configuring Trail's Coffee three-tier WiFi networks"
+
 # Generate a random 4-character suffix for the SSID and gateway name
 RANDOM_SUFFIX=$(head /dev/urandom | tr -dc 'A-Z0-9' | head -c 4)
-GATEWAY_NAME="TollGate-${RANDOM_SUFFIX}"
-SSID_2G="${GATEWAY_NAME}-2.4GHz"
-SSID_5G="${GATEWAY_NAME}-5GHz"
-log_message "Generated new SSIDs: ${SSID_2G} and ${SSID_5G}"
+GATEWAY_NAME="TrailsCoffee-${RANDOM_SUFFIX}"
 
-# Check if default radio0 exists before configuring
+# SSID definitions for three-tier network
+FREE_SSID_2G="TrailsCoffee-Free-2.4GHz"
+FREE_SSID_5G="TrailsCoffee-Free-5GHz"
+PREMIUM_SSID_2G="TrailsCoffee-Premium-2.4GHz"
+PREMIUM_SSID_5G="TrailsCoffee-Premium-5GHz"
+STAFF_SSID="TrailsCoffee-Staff"
+
+log_message "Generated new SSIDs:"
+log_message "  Free: ${FREE_SSID_2G} and ${FREE_SSID_5G}"
+log_message "  Premium: ${PREMIUM_SSID_2G} and ${PREMIUM_SSID_5G}"
+log_message "  Staff: ${STAFF_SSID}"
+
+# Configure Free Tier Networks (2.4GHz and 5GHz) - Limited bandwidth, captive portal
 if uci -q get wireless.default_radio0 >/dev/null; then
-    # Configure 2.4GHz WiFi with random suffix
-    uci_safe_set wireless default_radio0 name 'tollgate_2g_open'
-    uci_safe_set wireless default_radio0 ssid "${SSID_2G}"
+    # Configure Free 2.4GHz WiFi
+    uci_safe_set wireless default_radio0 name 'trails_free_2g'
+    uci_safe_set wireless default_radio0 ssid "${FREE_SSID_2G}"
     uci_safe_set wireless default_radio0 encryption 'none'
-    uci_safe_set wireless default_radio0 disabled '0'  # Ensure the interface is enabled
-    log_message "Configured 2.4GHz WiFi with SSID: ${SSID_2G}"
+    uci_safe_set wireless default_radio0 disabled '0'
+    uci_safe_set wireless default_radio0 network 'lan'  # Same network as captive portal
+    log_message "Configured Free 2.4GHz WiFi: ${FREE_SSID_2G}"
 else
     log_message "No 2.4GHz radio (default_radio0) found"
 fi
 
-# Check if default radio1 exists before configuring
 if uci -q get wireless.default_radio1 >/dev/null; then
-    # Configure 5GHz WiFi with the same random suffix
-    uci_safe_set wireless default_radio1 name 'tollgate_5g_open'
-    uci_safe_set wireless default_radio1 ssid "${SSID_5G}"
+    # Configure Free 5GHz WiFi
+    uci_safe_set wireless default_radio1 name 'trails_free_5g'
+    uci_safe_set wireless default_radio1 ssid "${FREE_SSID_5G}"
     uci_safe_set wireless default_radio1 encryption 'none'
-    uci_safe_set wireless default_radio1 disabled '0'  # Ensure the interface is enabled
-    log_message "Configured 5GHz WiFi with SSID: ${SSID_5G}"
+    uci_safe_set wireless default_radio1 disabled '0'
+    uci_safe_set wireless default_radio1 network 'lan'  # Same network as captive portal
+    log_message "Configured Free 5GHz WiFi: ${FREE_SSID_5G}"
 else
     log_message "No 5GHz radio (default_radio1) found"
+fi
+
+# Configure Premium Tier Networks (additional interfaces on same radios)
+# For premium networks, we'll create separate wireless interfaces
+if uci -q get wireless.radio0 >/dev/null; then
+    # Add premium 2.4GHz interface
+    uci add wireless wifi-iface >/dev/null 2>&1
+    PREMIUM_2G_IFACE="@wifi-iface[-1]"
+    uci_safe_set wireless "$PREMIUM_2G_IFACE" device 'radio0'
+    uci_safe_set wireless "$PREMIUM_2G_IFACE" name 'trails_premium_2g'
+    uci_safe_set wireless "$PREMIUM_2G_IFACE" ssid "${PREMIUM_SSID_2G}"
+    uci_safe_set wireless "$PREMIUM_2G_IFACE" encryption 'none'
+    uci_safe_set wireless "$PREMIUM_2G_IFACE" disabled '0'
+    uci_safe_set wireless "$PREMIUM_2G_IFACE" network 'lan'
+    log_message "Added Premium 2.4GHz interface: ${PREMIUM_SSID_2G}"
+fi
+
+if uci -q get wireless.radio1 >/dev/null; then
+    # Add premium 5GHz interface
+    uci add wireless wifi-iface >/dev/null 2>&1
+    PREMIUM_5G_IFACE="@wifi-iface[-1]"
+    uci_safe_set wireless "$PREMIUM_5G_IFACE" device 'radio1'
+    uci_safe_set wireless "$PREMIUM_5G_IFACE" name 'trails_premium_5g'
+    uci_safe_set wireless "$PREMIUM_5G_IFACE" ssid "${PREMIUM_SSID_5G}"
+    uci_safe_set wireless "$PREMIUM_5G_IFACE" encryption 'none'
+    uci_safe_set wireless "$PREMIUM_5G_IFACE" disabled '0'
+    uci_safe_set wireless "$PREMIUM_5G_IFACE" network 'lan'
+    log_message "Added Premium 5GHz interface: ${PREMIUM_SSID_5G}"
+fi
+
+# Configure Staff Network (password-protected, separate interface)
+# We'll use radio0 for staff network if available
+if uci -q get wireless.radio0 >/dev/null; then
+    # Add staff interface
+    uci add wireless wifi-iface >/dev/null 2>&1
+    STAFF_IFACE="@wifi-iface[-1]"
+    uci_safe_set wireless "$STAFF_IFACE" device 'radio0'
+    uci_safe_set wireless "$STAFF_IFACE" name 'trails_staff'
+    uci_safe_set wireless "$STAFF_IFACE" ssid "${STAFF_SSID}"
+    uci_safe_set wireless "$STAFF_IFACE" encryption 'sae-mixed'  # WPA3 with WPA2 fallback
+    uci_safe_set wireless "$STAFF_IFACE" key 'TrailCoffee2024!'  # Default password - should be changed
+    uci_safe_set wireless "$STAFF_IFACE" disabled '0'
+    uci_safe_set wireless "$STAFF_IFACE" network 'lan'  # Same LAN network but no captive portal
+    log_message "Added Staff network: ${STAFF_SSID}"
 fi
 
 # Enable wireless interfaces if they exist
@@ -203,8 +258,8 @@ fi
 uci commit wireless
 log_message "Committed wireless configuration"
 
-# 5. Configure NoDogSplash
-log_message "Configuring NoDogSplash"
+# 5. Configure NoDogSplash for Free and Premium networks
+log_message "Configuring NoDogSplash for Trail's Coffee captive portal"
 if ! uci -q get nodogsplash.@nodogsplash[0]; then
     # Create nodogsplash section if it doesn't exist
     uci add nodogsplash nodogsplash
@@ -213,16 +268,32 @@ else
     log_message "NoDogSplash configuration already exists"
 fi
 
-# Set basic NoDogSplash configuration with matching gateway name
+# Set basic NoDogSplash configuration with Trail's Coffee branding
 uci_safe_set nodogsplash @nodogsplash[0] enabled '1'
-uci_safe_set nodogsplash @nodogsplash[0] gatewayname "${GATEWAY_NAME} Portal"
+uci_safe_set nodogsplash @nodogsplash[0] gatewayname "Trail's Coffee WiFi Portal"
 uci_safe_set nodogsplash @nodogsplash[0] gatewayinterface 'br-lan'
 
-# Ensure TollGate protocol port is allowed
+# Allow access to TollGate services
 uci add_list nodogsplash.@nodogsplash[0].users_to_router='allow tcp port 2121'
 uci add_list nodogsplash.@nodogsplash[0].users_to_router='allow tcp port 8080'
+
+# Configure interface list - only Free and Premium networks get captive portal
+# Staff network bypasses captive portal
+if uci -q get wireless.trails_free_2g >/dev/null; then
+    uci_safe_add_list nodogsplash @nodogsplash[0] gatewayinterface 'trails_free_2g'
+fi
+if uci -q get wireless.trails_free_5g >/dev/null; then
+    uci_safe_add_list nodogsplash @nodogsplash[0] gatewayinterface 'trails_free_5g'
+fi
+if uci -q get wireless.trails_premium_2g >/dev/null; then
+    uci_safe_add_list nodogsplash @nodogsplash[0] gatewayinterface 'trails_premium_2g'
+fi
+if uci -q get wireless.trails_premium_5g >/dev/null; then
+    uci_safe_add_list nodogsplash @nodogsplash[0] gatewayinterface 'trails_premium_5g'
+fi
+
 uci commit nodogsplash
-log_message "NoDogSplash configuration completed"
+log_message "NoDogSplash configuration completed for Free and Premium networks"
 
 # 6. Add TollGate port to firewall (if not in firewall-tollgate)
 log_message "Checking for TollGate protocol port in firewall rules"

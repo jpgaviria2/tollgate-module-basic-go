@@ -28,11 +28,14 @@ set -e
 #   --device=DEVICE        - Target device model for architecture selection
 #                           Supported values:
 #                           - gl-mt3000 (ARM64 architecture) [default]
+#                           - gl-mt6000 (ARM64 architecture - MediaTek Filogic)
 #                           - gl-ar300 (MIPS with soft float)
 #
 # EXAMPLES:
 #   ./compile-to-router.sh                                    # Deploy to 192.168.1.1 for gl-mt3000
 #   ./compile-to-router.sh 192.168.1.100                     # Deploy to custom IP for gl-mt3000
+#   ./compile-to-router.sh --device=gl-mt6000                # Deploy to 192.168.1.1 for gl-mt6000
+#   ./compile-to-router.sh 192.168.1.100 --device=gl-mt6000  # Custom IP and device
 #   ./compile-to-router.sh --device=gl-ar300                 # Deploy to 192.168.1.1 for gl-ar300
 #   ./compile-to-router.sh 192.168.1.100 --device=gl-ar300  # Custom IP and device
 #
@@ -75,7 +78,7 @@ cd src
 
 # Build main service
 echo "Building TollGate service..."
-if [[ $DEVICE == "gl-mt3000" ]]; then
+if [[ $DEVICE == "gl-mt3000" ]] || [[ $DEVICE == "gl-mt6000" ]]; then
   env GOOS=linux GOARCH=arm64 go build -o $EXECUTABLE_NAME -trimpath -ldflags="-s -w"
 elif [[ $DEVICE == "gl-ar300" ]]; then
   env GOOS=linux GOARCH=mips GOMIPS=softfloat go build -o $EXECUTABLE_NAME -trimpath -ldflags="-s -w"
@@ -95,7 +98,7 @@ rm -f $CLI_NAME
 go clean -cache
 go mod tidy
 
-if [[ $DEVICE == "gl-mt3000" ]]; then
+if [[ $DEVICE == "gl-mt3000" ]] || [[ $DEVICE == "gl-mt6000" ]]; then
   env GOOS=linux GOARCH=arm64 go build -o $CLI_NAME -trimpath -ldflags="-s -w"
 elif [[ $DEVICE == "gl-ar300" ]]; then
   env GOOS=linux GOARCH=mips GOMIPS=softfloat go build -o $CLI_NAME -trimpath -ldflags="-s -w"

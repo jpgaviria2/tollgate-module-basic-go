@@ -93,6 +93,15 @@ func New(configManager *config_manager.ConfigManager) (MerchantInterface, error)
 	log.Printf("Accepted Mints: %v", config.AcceptedMints)
 	log.Printf("Wallet Balance: %d", balance)
 	log.Printf("Advertisement: %s", advertisementStr)
+
+	// Initialize traffic control for bandwidth limiting (ignore errors on systems without tc)
+	if err := valve.InitTrafficControl(); err != nil {
+		log.Printf("Warning: Failed to initialize traffic control: %v", err)
+		log.Printf("Bandwidth limiting may not work on this system")
+	} else {
+		log.Printf("Traffic control initialized for bandwidth limiting")
+	}
+
 	log.Printf("=== Merchant ready ===")
 
 	return &Merchant{
@@ -281,8 +290,12 @@ func (m *Merchant) PurchaseSession(paymentEvent nostr.Event) (*nostr.Event, erro
 		endTimestamp = time.Now().Unix() + (24 * 60 * 60) // 24 hours from now
 	}
 
-	// Open gate until the calculated end time
-	err = valve.OpenGateUntil(macAddress, endTimestamp)
+	// Determine tier based on payment amount (Trail's Coffee pricing)
+	tier := determineTier(amount)
+	log.Printf("Determined tier: %s for payment amount: %d", tier, amount)
+
+	// Open gate until the calculated end time with appropriate tier
+	err = valve.OpenGateUntil(macAddress, endTimestamp, tier)
 	if err != nil {
 		noticeEvent, noticeErr := m.CreateNoticeEvent("error", "gate-opening-failed",
 			fmt.Sprintf("Failed to open gate for session: %v", err), paymentEvent.PubKey)
@@ -775,6 +788,23 @@ func (m *Merchant) CreateNoticeEvent(level, code, message, customerPubkey string
 	}
 
 	return noticeEvent, nil
+}
+
+// determineTier determines the service tier based on payment amount
+// Trail's Coffee pricing tiers:
+// - Free: 0 sats (2Mbps limited)
+// - Premium: 10 sats/hour (unlimited speed)
+// - Staff: Special handling (unlimited, password-protected network)
+func determineTier(amount uint64) string {
+	if amount == 0 {
+		return "free"
+	} else if amount >= 10 {
+		// 10 sats or more = premium tier
+		return "premium"
+	} else {
+		// Small payments default to free tier with time limits
+		return "free"
+	}
 }
 
 // MerchantInterface method implementations

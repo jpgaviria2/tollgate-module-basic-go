@@ -1,0 +1,125 @@
+#!/bin/sh
+# Trail's Coffee Pricing Configuration
+# Sets up three-tier pricing: Free (limited), Premium (10 sats/hour), Staff (unlimited free)
+
+# Function to log messages
+log_message() {
+    logger -t trails-coffee-pricing "$1"
+    echo "$1"
+}
+
+log_message "Starting Trail's Coffee pricing configuration..."
+
+# Helper function to safely set UCI option-value pairs
+uci_safe_set() {
+    local config="$1"
+    local section="$2"
+    local option="$3"
+    local value="$4"
+    uci set "$config.$section.$option=$value"
+}
+
+# Configure Trail's Coffee pricing: 10 sats per hour for unlimited access
+log_message "Setting Trail's Coffee premium pricing: 10 sats/hour"
+
+# Create/update the main tollgate configuration
+if [ ! -f "/etc/tollgate/config.json" ]; then
+    # Create default config if it doesn't exist
+    cat > /etc/tollgate/config.json << 'EOF'
+{
+  "tollgate_private_key": "CONFIGURE_THIS_KEY",
+  "accepted_mints": [
+    {
+      "url": "https://mint.example.com/Bitcoin",
+      "min_balance": 100,
+      "balance_tolerance_percent": 10,
+      "payout_interval_seconds": 3600,
+      "min_payout_amount": 1000,
+      "price_per_step": 10,
+      "price_unit": "hour",
+      "purchase_min_steps": 1
+    }
+  ],
+  "profit_share": [
+    {
+      "factor": 0.85,
+      "identity": "trails_coffee_owner"
+    },
+    {
+      "factor": 0.15,
+      "identity": "tollgate_developer"
+    }
+  ],
+  "step_size": 3600000,
+  "metric": "milliseconds",
+  "price_per_minute": 0,
+  "bragging": {
+    "enabled": true,
+    "fields": ["amount", "duration", "tier"]
+  }
+}
+EOF
+    log_message "Created default TollGate configuration with Trail's Coffee pricing"
+else
+    log_message "TollGate config already exists, updating pricing..."
+
+    # Update existing config with Trail's Coffee pricing
+    # This would need jq or similar tool, for now we'll note it needs manual configuration
+    log_message "Manual configuration needed: Set price_per_step=10, price_unit='hour', step_size=3600000"
+fi
+
+# Configure pricing tiers
+log_message "Configuring pricing tiers for Trail's Coffee..."
+
+# The pricing configuration will be handled in the main config file
+# For now, we'll create a template that gets applied during first run
+
+# Create pricing configuration template
+cat > /etc/tollgate/pricing_template.json << 'EOF'
+{
+  "pricing_tiers": {
+    "free": {
+      "name": "Free WiFi",
+      "description": "Limited to 2Mbps - Perfect for browsing and email",
+      "bandwidth_limit": 2048,
+      "time_limit": 3600000,
+      "price_sat": 0,
+      "price_display": "Free",
+      "networks": ["trails_free_2g", "trails_free_5g"]
+    },
+    "premium": {
+      "name": "Premium Unlimited",
+      "description": "Unlimited speed and bandwidth for 1 hour",
+      "bandwidth_limit": 0,
+      "time_limit": 3600000,
+      "price_sat": 10,
+      "price_display": "10 sats/hour",
+      "networks": ["trails_premium_2g", "trails_premium_5g"]
+    },
+    "staff": {
+      "name": "Staff Network",
+      "description": "Unlimited access for staff only",
+      "bandwidth_limit": 0,
+      "time_limit": 0,
+      "price_sat": 0,
+      "price_display": "Staff Only",
+      "networks": ["trails_staff"],
+      "bypass_captive_portal": true
+    }
+  },
+  "branding": {
+    "name": "Trail's Coffee",
+    "website": "https://trailscoffee.com",
+    "description": "Bitcoin-powered coffee shop WiFi",
+    "bitcoin_education": true
+  }
+}
+EOF
+
+log_message "Created pricing template at /etc/tollgate/pricing_template.json"
+
+# Note: The actual pricing implementation will be handled in the Go code
+# This template provides configuration that the application can read
+
+log_message "Trail's Coffee pricing configuration completed."
+exit 0
